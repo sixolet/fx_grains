@@ -1,6 +1,37 @@
 local fx = require("fx/lib/fx")
 local mod = require 'core/mods'
 local music = require("musicutil")
+local hook = require 'core/hook'
+local tab = require 'tabutil'
+-- Begin post-init hack block
+if hook.script_post_init == nil and mod.hook.patched == nil then
+    mod.hook.patched = true
+    local old_register = mod.hook.register
+    local post_init_hooks = {}
+    mod.hook.register = function(h, name, f)
+        if h == "script_post_init" then
+            post_init_hooks[name] = f
+        else
+            old_register(h, name, f)
+        end
+    end
+    mod.hook.register('script_pre_init', '!replace init for fake post init', function()
+        local old_init = init
+        init = function()
+            old_init()
+            for i, k in ipairs(tab.sort(post_init_hooks)) do
+                local cb = post_init_hooks[k]
+                print('calling: ', k)
+                local ok, error = pcall(cb)
+                if not ok then
+                    print('hook: ' .. k .. ' failed, error: ' .. error)
+                end
+            end
+        end
+    end)
+end
+-- end post-init hack block
+
 
 local FxGrains = fx:new {
     subpath = "/fx_grains"
@@ -49,8 +80,8 @@ function FxGrains:add_params()
     end
 end
 
-mod.hook.register("script_pre_init", "grains mod pre init", function()
-    FxGrains:install()
+mod.hook.register("script_post_init", "fx grains mod post init", function()
+    FxGrains:add_params()
 end)
 
 mod.hook.register("script_post_cleanup", "grains mod post cleanup", function()
